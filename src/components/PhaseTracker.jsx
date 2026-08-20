@@ -467,7 +467,7 @@ export default function PhaseTracker() {
               <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg,#1D9E75,#16c98d)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <Zap size={14} color="#fff" strokeWidth={2.5} />
               </div>
-              <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em" }}>AASIST Phase Tracker</span>
+              <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-0.01em" }}>Progress Tracker</span>
             </div>
             <span className="ag-mono" style={{ fontSize: 12, color: "#B0AEA4" }}>Audio Deepfake Detection</span>
           </div>
