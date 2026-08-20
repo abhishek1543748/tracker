@@ -699,17 +699,17 @@ export default function PhaseTracker() {
               />
             </div>
 
-            {isDifferentPerson && (
-              <div style={{ marginBottom: 12 }} className="ag-panel-enter">
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5F5E5A", marginBottom: 4 }}>Technical Discrepancy (Reason)</label>
-                <textarea
-                  placeholder="What was the discrepancy or reason for unchecking?"
-                  value={uncheckReason}
-                  onChange={(e) => setUncheckReason(e.target.value)}
-                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E3D8", fontSize: 14, fontFamily: "inherit", color: "#26211C", minHeight: 60, resize: "vertical" }}
-                />
-              </div>
-            )}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5F5E5A", marginBottom: 4 }}>
+                {isDifferentPerson ? "Technical Discrepancy (Required Reason)" : "Technical Discrepancy (Optional)"}
+              </label>
+              <textarea
+                placeholder={isDifferentPerson ? "What was the discrepancy or reason for unchecking?" : "Optional reason"}
+                value={uncheckReason}
+                onChange={(e) => setUncheckReason(e.target.value)}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E3D8", fontSize: 14, fontFamily: "inherit", color: "#26211C", minHeight: 60, resize: "vertical" }}
+              />
+            </div>
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#991B1B", marginBottom: 4 }}>Type UNCHECK to confirm</label>
