@@ -1,4 +1,7 @@
-# React + Vite
+# tracker
+this is for tracking work on a project my team is working on so i made this for. I know its useless,But still
+
+## React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
