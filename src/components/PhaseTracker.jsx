@@ -246,6 +246,12 @@ function taskId(phaseId, idx) {
   return `${phaseId}-t${idx}`;
 }
 
+function getTaskName(id) {
+  const [pId, tIdxStr] = id.split("-t");
+  const phase = PHASES.find((p) => p.id === pId);
+  return phase ? phase.tasks[parseInt(tIdxStr, 10)] : "";
+}
+
 const INJECTED_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
   *, *::before, *::after { box-sizing: border-box; }
@@ -279,6 +285,10 @@ export default function PhaseTracker() {
   const [myName, setMyName] = useState("");
   const [pendingId, setPendingId] = useState(null);
   const [draftName, setDraftName] = useState("");
+  const [uncheckPendingId, setUncheckPendingId] = useState(null);
+  const [uncheckConfirmText, setUncheckConfirmText] = useState("");
+  const [uncheckName, setUncheckName] = useState("");
+  const [uncheckReason, setUncheckReason] = useState("");
 
   // ── Load completions from Supabase on mount ───────────────────────────────
   useEffect(() => {
@@ -336,11 +346,10 @@ export default function PhaseTracker() {
   // ── Toggle task ───────────────────────────────────────────────────────────
   const toggle = (id) => {
     if (completions[id]) {
-      setCompletions((prev) => { const n = { ...prev }; delete n[id]; return n; });
-      supabase.from("completions").delete().eq("id", id).then(({ error: err }) => {
-        if (err) { setError("Couldn't remove — check your connection."); console.error(err); }
-        else setError(null);
-      });
+      setUncheckPendingId(id);
+      setUncheckConfirmText("");
+      setUncheckName(myName || "");
+      setUncheckReason("");
       return;
     }
     setPendingId(id);
@@ -360,7 +369,7 @@ export default function PhaseTracker() {
       try { localStorage.setItem("aasist-tracker-my-name", name); } catch (_) {}
     }
     const { error: err } = await supabase.from("completions").insert({
-      id: pendingId, completed_by: name, completed_at: now,
+      id: pendingId, completed_by: name, completed_at: now, task_name: getTaskName(pendingId)
     });
     if (err) {
       setError("Couldn't save — check your connection and try again.");
@@ -370,6 +379,51 @@ export default function PhaseTracker() {
   }, [draftName, myName, pendingId]);
 
   const cancelComplete = () => { setPendingId(null); setDraftName(""); };
+
+  // ── Confirm Uncheck ───────────────────────────────────────────────────────
+  const confirmUncheck = useCallback(async () => {
+    if (uncheckConfirmText !== "UNCHECK") return;
+    const id = uncheckPendingId;
+    const originalAuthor = completions[id].by;
+    const uncheckerName = uncheckName.trim();
+    const isDifferentPerson = uncheckerName.toLowerCase() !== originalAuthor.toLowerCase();
+    
+    if (!uncheckerName) return;
+    if (isDifferentPerson && !uncheckReason.trim()) return;
+    
+    if (uncheckerName !== myName) {
+      setMyName(uncheckerName);
+      try { localStorage.setItem("aasist-tracker-my-name", uncheckerName); } catch (_) {}
+    }
+
+    setCompletions((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    setUncheckPendingId(null);
+    setUncheckConfirmText("");
+    setUncheckName("");
+    setUncheckReason("");
+
+    const { error: err } = await supabase.from("completions").delete().eq("id", id);
+    if (err) {
+      setError("Couldn't remove — check your connection.");
+      console.error(err);
+    } else {
+      setError(null);
+      if (isDifferentPerson) {
+        supabase.from("discrepancies").insert({
+          task_id: id,
+          task_name: getTaskName(id),
+          original_author: originalAuthor,
+          unchecked_by: uncheckerName,
+          reason: uncheckReason.trim(),
+          unchecked_at: new Date().toISOString()
+        }).then(({ error: logErr }) => {
+          if (logErr) console.error("Failed to log discrepancy:", logErr);
+        });
+      }
+    }
+  }, [uncheckConfirmText, uncheckPendingId, uncheckName, uncheckReason, completions, myName]);
+
+  const cancelUncheck = () => { setUncheckPendingId(null); setUncheckConfirmText(""); setUncheckName(""); setUncheckReason(""); };
 
   const totalTasks = PHASES.reduce((sum, p) => sum + p.tasks.length, 0);
   const totalDone  = Object.keys(completions).length;
@@ -609,6 +663,85 @@ export default function PhaseTracker() {
           </div>
         </div>
       )}
+
+      {/* ── High-friction Uncheck modal ── */}
+      {uncheckPendingId && completions[uncheckPendingId] && (() => {
+        const originalAuthor = completions[uncheckPendingId].by;
+        const isDifferentPerson = uncheckName.trim().toLowerCase() !== originalAuthor.toLowerCase();
+        const canSubmit = uncheckConfirmText === "UNCHECK" && uncheckName.trim() && (!isDifferentPerson || uncheckReason.trim().length > 2);
+
+        return (
+        <div className="ag-modal-backdrop" onClick={cancelUncheck}>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 16, padding: "1.5rem", width: 360, boxShadow: "0 24px 48px rgba(0,0,0,0.20), 0 0 0 1px rgba(0,0,0,0.06)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <AlertCircle size={14} color="#991B1B" />
+              </div>
+              <span style={{ fontWeight: 600, fontSize: 15, color: "#991B1B" }}>Danger: Uncheck task?</span>
+            </div>
+            
+            <p style={{ fontSize: 13, color: "#5F5E5A", marginBottom: 16, lineHeight: 1.5 }}>
+              This task was originally marked done by <strong>{originalAuthor}</strong>. 
+            </p>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5F5E5A", marginBottom: 4 }}>Your Name</label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Who is unchecking this?"
+                value={uncheckName}
+                onChange={(e) => setUncheckName(e.target.value)}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E3D8", fontSize: 14, fontFamily: "inherit", color: "#26211C" }}
+              />
+            </div>
+
+            {isDifferentPerson && (
+              <div style={{ marginBottom: 12 }} className="ag-panel-enter">
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#5F5E5A", marginBottom: 4 }}>Technical Discrepancy (Reason)</label>
+                <textarea
+                  placeholder="What was the discrepancy or reason for unchecking?"
+                  value={uncheckReason}
+                  onChange={(e) => setUncheckReason(e.target.value)}
+                  style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #E5E3D8", fontSize: 14, fontFamily: "inherit", color: "#26211C", minHeight: 60, resize: "vertical" }}
+                />
+              </div>
+            )}
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#991B1B", marginBottom: 4 }}>Type UNCHECK to confirm</label>
+              <input
+                type="text"
+                placeholder="UNCHECK"
+                value={uncheckConfirmText}
+                onChange={(e) => setUncheckConfirmText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && canSubmit && confirmUncheck()}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1px solid #FECACA", fontSize: 14, fontFamily: "inherit", color: "#991B1B" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={cancelUncheck}
+                style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E3D8", background: "none", fontSize: 13, cursor: "pointer", fontFamily: "inherit", color: "#5F5E5A" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmUncheck}
+                disabled={!canSubmit}
+                style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: canSubmit ? "#DC2626" : "#FCA5A5", color: "#fff", fontSize: 13, cursor: canSubmit ? "pointer" : "not-allowed", fontFamily: "inherit", fontWeight: 600 }}
+              >
+                Force Uncheck
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
     </>
   );
 }
