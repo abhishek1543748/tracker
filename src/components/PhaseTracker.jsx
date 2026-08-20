@@ -396,6 +396,7 @@ export default function PhaseTracker() {
       try { localStorage.setItem("aasist-tracker-my-name", uncheckerName); } catch (_) {}
     }
 
+    const originalCompletions = { ...completions };
     setCompletions((prev) => { const n = { ...prev }; delete n[id]; return n; });
     setUncheckPendingId(null);
     setUncheckConfirmText("");
@@ -405,21 +406,20 @@ export default function PhaseTracker() {
     const { error: err } = await supabase.from("completions").delete().eq("id", id);
     if (err) {
       setError("Couldn't remove — check your connection.");
+      setCompletions(originalCompletions);
       console.error(err);
     } else {
       setError(null);
-      if (isDifferentPerson) {
-        supabase.from("discrepancies").insert({
-          task_id: id,
-          task_name: getTaskName(id),
-          original_author: originalAuthor,
-          unchecked_by: uncheckerName,
-          reason: uncheckReason.trim(),
-          unchecked_at: new Date().toISOString()
-        }).then(({ error: logErr }) => {
-          if (logErr) console.error("Failed to log discrepancy:", logErr);
-        });
-      }
+      supabase.from("discrepancies").insert({
+        task_id: id,
+        task_name: getTaskName(id),
+        original_author: originalAuthor,
+        unchecked_by: uncheckerName,
+        reason: isDifferentPerson ? uncheckReason.trim() : "Self-unchecked",
+        unchecked_at: new Date().toISOString()
+      }).then(({ error: logErr }) => {
+        if (logErr) console.error("Failed to log discrepancy:", logErr);
+      });
     }
   }, [uncheckConfirmText, uncheckPendingId, uncheckName, uncheckReason, completions, myName]);
 
